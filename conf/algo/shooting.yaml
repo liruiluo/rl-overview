@@ -1,0 +1,5 @@
+name: shooting
+gamma: 0.99
+horizon: 10
+n_candidates: 200
+

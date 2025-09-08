@@ -1,0 +1,10 @@
+defaults:
+  - env: gridworld1d
+  - algo: value_iteration
+  - _self_
+
+seed: 42
+
+hydra:
+  run:
+    dir: outputs/${now:%Y%m%d}/${now:%H%M%S}

@@ -1,0 +1,7 @@
+name: reinforce
+gamma: 0.99
+lr: 1e-2
+episodes: 2000
+max_steps: 1000
+seed: 42
+

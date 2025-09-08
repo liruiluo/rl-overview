@@ -1,0 +1,14 @@
+name: dqn
+gamma: 0.99
+lr: 1e-3
+batch_size: 64
+replay_capacity: 10000
+start_learning_after: 1000
+target_sync_interval: 1000
+total_steps: 5000
+epsilon_start: 1.0
+epsilon_end: 0.05
+epsilon_decay_steps: 3000
+double_dqn: false
+dueling: false
+seed: 42

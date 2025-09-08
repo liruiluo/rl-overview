@@ -1,0 +1,5 @@
+name: mcts
+gamma: 0.99
+num_simulations: 200
+max_depth: 20
+

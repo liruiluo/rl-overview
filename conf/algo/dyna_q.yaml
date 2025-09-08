@@ -1,0 +1,9 @@
+name: dyna_q
+gamma: 0.99
+alpha: 0.1
+epsilon: 0.1
+episodes: 500
+max_steps: 200
+planning_steps: 20
+seed: 42
+

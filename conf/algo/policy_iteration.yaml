@@ -1,0 +1,6 @@
+name: policy_iteration
+gamma: 0.99
+theta: 1e-8
+max_policy_eval_iters: 10000
+max_policy_iters: 1000
+

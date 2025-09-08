@@ -1,0 +1,8 @@
+name: td_lambda_eval
+gamma: 0.99
+lam: 0.9
+alpha: 0.1
+episodes: 2000
+max_steps: 1000
+seed: 42
+

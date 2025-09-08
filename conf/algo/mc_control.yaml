@@ -1,0 +1,7 @@
+name: mc_control
+gamma: 0.99
+epsilon: 0.1
+episodes: 2000
+max_steps: 1000
+seed: 42
+

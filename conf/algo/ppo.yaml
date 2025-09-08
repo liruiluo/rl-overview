@@ -1,0 +1,12 @@
+name: ppo
+gamma: 0.99
+lam: 0.95
+lr: 3e-4
+steps_per_epoch: 1024
+epochs: 5
+clip_ratio: 0.2
+train_iters: 40
+vf_coef: 0.5
+ent_coef: 0.0
+seed: 42
+

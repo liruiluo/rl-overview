@@ -1,0 +1,7 @@
+name: td0_eval
+gamma: 0.99
+alpha: 0.1
+episodes: 2000
+max_steps: 1000
+seed: 42
+
