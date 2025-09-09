@@ -68,55 +68,48 @@ def train_ppo(
 
     total_steps = 0
     for epoch in range(epochs):
-        obs_buf = []
-        act_buf = []
-        adv_buf = []
-        ret_buf = []
-        logp_buf = []
-
-        vals = []
-        rets = []
-        lens = []
+        obs_buf = []        # s_t (int)
+        act_buf = []        # a_t
+        rew_buf = []        # r_t
+        val_buf = []        # V(s_t)
+        logp_buf = []       # log π(a_t|s_t)
+        done_buf = []       # done_t
 
         s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
-        ep_rew = 0.0
-        ep_len = 0
         buf_steps = 0
 
-        # 收集一批 trajectories
+        # 收集一批 trajectories（on-policy）
         while buf_steps < steps_per_epoch:
             with torch.no_grad():
-                pi = ac.pi(one_hot(int(s)))
-                v = ac.v(one_hot(int(s)))
-            a = int(pi.sample().item())
-            logp = float(pi.log_prob(torch.tensor(a, device=device)).item())
+                pi_dist = ac.pi(one_hot(int(s)))
+                v_t = ac.v(one_hot(int(s)))
+            a = int(pi_dist.sample().item())
+            logp = float(pi_dist.log_prob(torch.tensor(a, device=device)).item())
             s2, r, done, _ = env.step(a)
+
             obs_buf.append(int(s))
             act_buf.append(a)
+            rew_buf.append(float(r))
+            val_buf.append(float(v_t.item()))
             logp_buf.append(logp)
-            vals.append(float(v.item()))
-            ep_rew += r
-            ep_len += 1
-            buf_steps += 1
-            s = s2
-            if done:
-                rets.append(ep_rew)
-                lens.append(ep_len)
-                s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
-                ep_rew = 0.0
-                ep_len = 0
+            done_buf.append(bool(done))
 
-        # 计算 GAE 与 returns
+            s = env.reset(seed=int(rng.integers(0, 2**31 - 1))) if done else s2
+            buf_steps += 1
+
+        # 计算 GAE 与 returns（按批次，忽略跨批次的 bootstrapping）
         with torch.no_grad():
             last_val = ac.v(one_hot(int(s))).item()
-        vals_np = np.array(vals + [last_val], dtype=np.float32)
-        rewards = np.zeros(len(vals), dtype=np.float32)  # 我们缺少逐步奖励缓存，上面只累计了 ep_rew，故简化假设稀疏奖励任务时可用
-        # 为了教学骨架，此处将奖励近似为 0，仅用于管线演示；实际实现需缓存 r_t 列表
-        adv = np.zeros_like(rewards)
+        vals_np = np.array(val_buf + [last_val], dtype=np.float32)
+        rews_np = np.array(rew_buf, dtype=np.float32)
+        dones_np = np.array(done_buf, dtype=np.bool_)
+
+        adv = np.zeros_like(rews_np)
         lastgaelam = 0.0
-        for t in reversed(range(len(rewards))):
-            delta = rewards[t] + gamma * vals_np[t + 1] - vals_np[t]
-            lastgaelam = delta + gamma * lam * lastgaelam
+        for t in reversed(range(len(rews_np))):
+            nonterminal = 1.0 - float(dones_np[t])
+            delta = rews_np[t] + gamma * vals_np[t + 1] * nonterminal - vals_np[t]
+            lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
             adv[t] = lastgaelam
         ret = adv + vals_np[:-1]
 
@@ -128,7 +121,7 @@ def train_ppo(
         logp_old_t = torch.tensor(logp_buf, dtype=torch.float32, device=device)
         adv_t = (adv_t - adv_t.mean()) / (adv_t.std() + 1e-8)
 
-        # 训练多次
+        # 训练多次（全批）
         for _ in range(train_iters):
             pi = ac.pi(obs_t)
             logp = pi.log_prob(act_t)
@@ -155,4 +148,3 @@ def train_ppo(
             policy.append(a)
 
     return PPOResult(policy=policy, iters=total_steps)
-

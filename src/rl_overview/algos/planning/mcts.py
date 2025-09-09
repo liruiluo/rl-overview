@@ -46,8 +46,9 @@ def mcts_action(env, s0: int, gamma: float = 0.99, num_simulations: int = 1000, 
         if depth >= max_depth or node.s in env.terminal_states:
             return 0.0
         # 选择动作
-        total_N = node.N.sum() + 1e-8
-        ucb = node.Q + c_ucb * np.sqrt(np.log(total_N) / (node.N + 1e-8))
+        total_N = node.N.sum()
+        # 使用 log(total_N + 1) 保证非负，避免 sqrt 负数
+        ucb = node.Q + c_ucb * np.sqrt(np.log(total_N + 1.0) / (node.N + 1e-8))
         a = int(np.argmax(ucb))
         s2 = sample_next(node.s, a)
         child_key = (a, s2)
@@ -101,4 +102,3 @@ def random_shooting_action(env, s0: int, horizon: int = 10, n_candidates: int = 
             best_return = G
             best_a0 = a0
     return best_a0
-

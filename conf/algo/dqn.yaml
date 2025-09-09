@@ -11,4 +11,9 @@ epsilon_end: 0.05
 epsilon_decay_steps: 3000
 double_dqn: false
 dueling: false
+prioritized_replay: false
+prio_alpha: 0.6
+prio_beta: 0.4
+prio_eps: 0.001
+n_step: 1
 seed: 42

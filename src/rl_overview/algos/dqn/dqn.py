@@ -11,10 +11,12 @@ from __future__ import annotations
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple, Deque
+from collections import deque
 
 import numpy as np
 from ...replay.buffer import ReplayBuffer
+from ...replay.prioritized import PrioritizedReplayBuffer
 from ...nn.torch_utils import is_torch_available, get_device
 
 
@@ -48,6 +50,11 @@ def train_dqn(
     epsilon_decay_steps: int = 10_000,
     double_dqn: bool = False,
     dueling: bool = False,
+    n_step: int = 1,
+    prioritized_replay: bool = False,
+    prio_alpha: float = 0.6,
+    prio_beta: float = 0.4,
+    prio_eps: float = 1e-3,
     seed: int = 42,
 ) -> DQNResult:
     if not is_torch_available():  # pragma: no cover - 运行时检查
@@ -72,9 +79,15 @@ def train_dqn(
     optim_ = optim.Adam(online.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
 
-    rb = ReplayBuffer(replay_capacity)
+    use_prio = bool(prioritized_replay)
+    if use_prio:
+        rb = PrioritizedReplayBuffer(replay_capacity, alpha=float(prio_alpha), eps=float(prio_eps))
+    else:
+        rb = ReplayBuffer(replay_capacity)
     s = env.reset(seed=seed)
     steps = 0
+    n = max(1, int(n_step))
+    trace: Deque[tuple] = deque(maxlen=n)
 
     def epsilon_by_step(t):
         f = min(1.0, t / max(1, epsilon_decay_steps))
@@ -90,12 +103,32 @@ def train_dqn(
                 a = int(torch.argmax(q, dim=-1).item())
 
         s2, r, done, _ = env.step(a)
-        rb.push(s, a, r, s2, done)
+        # n-step accumulation
+        trace.append((s, a, r))
+        def flush_trace(s_next, done_flag):
+            Rn = 0.0
+            g = 1.0
+            for (_, _, r_i) in trace:
+                Rn += g * r_i
+                g *= gamma
+            s0, a0, _ = trace[0]
+            if use_prio:
+                rb.push(s0, a0, Rn, s_next, done_flag, priority=None)
+            else:
+                rb.push(s0, a0, Rn, s_next, done_flag)
+
+        if len(trace) == n:
+            flush_trace(s2, done)
+            trace.popleft()
         s = env.reset(seed=int(rng.integers(0, 2**31 - 1))) if done else s2
         steps += 1
 
         if steps >= start_learning_after and len(rb) >= batch_size:
-            S, A, R, S2, D = rb.sample(batch_size, rng)
+            if use_prio:
+                S, A, R, S2, D, W, idxs = rb.sample(batch_size, beta=float(prio_beta), rng=rng)
+                W_t = torch.from_numpy(W).float().to(device)
+            else:
+                S, A, R, S2, D = rb.sample(batch_size, rng)
 
             S_oh = torch.from_numpy(_one_hot(obs_dim, S.squeeze(-1))).to(device)
             S2_oh = torch.from_numpy(_one_hot(obs_dim, S2.squeeze(-1))).to(device)
@@ -110,13 +143,21 @@ def train_dqn(
                     next_q = target(S2_oh).gather(1, next_actions.view(-1, 1)).squeeze(1)
                 else:
                     next_q = torch.max(target(S2_oh), dim=1).values
-                target_q = R_t + (1.0 - D_t) * gamma * next_q
+                target_q = R_t + (1.0 - D_t) * (gamma ** n) * next_q
 
-            loss = loss_fn(q, target_q)
+            td_err = target_q - q
+            if use_prio:
+                loss = (W_t * (td_err ** 2)).mean()
+            else:
+                loss = loss_fn(q, target_q)
             optim_.zero_grad(set_to_none=True)
             loss.backward()
             nn.utils.clip_grad_norm_(online.parameters(), max_norm=10.0)
             optim_.step()
+
+            if use_prio:
+                new_prios = (td_err.detach().abs().cpu().numpy() + prio_eps)
+                rb.update_priorities(idxs, new_prios)
 
         if steps % target_sync_interval == 0:
             target.load_state_dict(online.state_dict())
