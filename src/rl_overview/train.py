@@ -129,7 +129,9 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
             n_step=int(getattr(cfg.algo, "n_step", 1)),
             prioritized_replay=bool(getattr(cfg.algo, "prioritized_replay", False)),
             prio_alpha=float(getattr(cfg.algo, "prio_alpha", 0.6)),
-            prio_beta=float(getattr(cfg.algo, "prio_beta", 0.4)),
+            prio_beta=float(getattr(cfg.algo, "prio_beta", 0.0)) or None,
+            prio_beta_start=float(getattr(cfg.algo, "prio_beta_start", 0.4)),
+            prio_beta_end=float(getattr(cfg.algo, "prio_beta_end", 1.0)),
             prio_eps=float(getattr(cfg.algo, "prio_eps", 1e-3)),
             noisy=bool(getattr(cfg.algo, "noisy", False)),
             seed=int(cfg.algo.seed),
@@ -195,8 +197,11 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
             epochs=int(cfg.algo.epochs),
             clip_ratio=float(cfg.algo.clip_ratio),
             train_iters=int(cfg.algo.train_iters),
+            minibatch_size=int(getattr(cfg.algo, "minibatch_size", 0)) or None,
             vf_coef=float(cfg.algo.vf_coef),
             ent_coef=float(cfg.algo.ent_coef),
+            target_kl=float(getattr(cfg.algo, "target_kl", 0.0)) or None,
+            anneal_lr=bool(getattr(cfg.algo, "anneal_lr", False)),
             seed=int(cfg.algo.seed),
         )
         values = [0.0 for _ in range(env.n_states)]

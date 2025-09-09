@@ -13,7 +13,8 @@ double_dqn: false
 dueling: false
 prioritized_replay: false
 prio_alpha: 0.6
-prio_beta: 0.4
+prio_beta_start: 0.4
+prio_beta_end: 1.0
 prio_eps: 0.001
 n_step: 1
 noisy: false

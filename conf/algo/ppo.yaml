@@ -6,7 +6,9 @@ steps_per_epoch: 1024
 epochs: 5
 clip_ratio: 0.2
 train_iters: 40
+minibatch_size: 256
 vf_coef: 0.5
 ent_coef: 0.0
+target_kl: 0.01
+anneal_lr: true
 seed: 42
-

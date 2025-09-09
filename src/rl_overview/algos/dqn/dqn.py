@@ -53,7 +53,9 @@ def train_dqn(
     n_step: int = 1,
     prioritized_replay: bool = False,
     prio_alpha: float = 0.6,
-    prio_beta: float = 0.4,
+    prio_beta: float | None = None,
+    prio_beta_start: float = 0.4,
+    prio_beta_end: float = 1.0,
     prio_eps: float = 1e-3,
     noisy: bool = False,
     seed: int = 42,
@@ -144,13 +146,12 @@ def train_dqn(
         if steps >= start_learning_after and len(rb) >= batch_size:
             if use_prio:
                 # 退火 beta
-                cur_beta = float(prio_beta)
-                try:
-                    beta_final = float(prio_beta)
-                except Exception:
-                    beta_final = cur_beta
+                beta0 = float(prio_beta_start)
+                beta1 = float(prio_beta_end)
+                if prio_beta is not None:
+                    beta0 = beta1 = float(prio_beta)
                 frac = min(1.0, steps / max(1, total_steps))
-                cur_beta = cur_beta + (beta_final - cur_beta) * frac
+                cur_beta = beta0 + (beta1 - beta0) * frac
                 S, A, R, S2, D, W, idxs = rb.sample(batch_size, beta=cur_beta, rng=rng)
                 W_t = torch.from_numpy(W).float().to(device)
             else:

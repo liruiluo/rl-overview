@@ -1,0 +1,22 @@
+name: dqn
+gamma: 0.99
+lr: 1e-3
+batch_size: 64
+replay_capacity: 100000
+start_learning_after: 20000
+target_sync_interval: 5000
+total_steps: 200000
+epsilon_start: 1.0
+epsilon_end: 0.01
+epsilon_decay_steps: 50000
+double_dqn: true
+dueling: true
+prioritized_replay: true
+prio_alpha: 0.6
+prio_beta_start: 0.4
+prio_beta_end: 1.0
+prio_eps: 0.001
+n_step: 3
+noisy: true
+seed: 42
+

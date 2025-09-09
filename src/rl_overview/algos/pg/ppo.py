@@ -27,8 +27,11 @@ def train_ppo(
     epochs: int = 10,
     clip_ratio: float = 0.2,
     train_iters: int = 80,
+    minibatch_size: int | None = None,
     vf_coef: float = 0.5,
     ent_coef: float = 0.0,
+    target_kl: float | None = None,
+    anneal_lr: bool = False,
     seed: int = 42,
 ) -> PPOResult:
     if not is_torch_available():  # pragma: no cover
@@ -137,20 +140,46 @@ def train_ppo(
         logp_old_t = torch.tensor(logp_buf, dtype=torch.float32, device=device)
         adv_t = (adv_t - adv_t.mean()) / (adv_t.std() + 1e-8)
 
-        # 训练多次（全批）
-        for _ in range(train_iters):
-            pi = ac.pi(obs_t)
-            logp = pi.log_prob(act_t)
-            ratio = torch.exp(logp - logp_old_t)
-            clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv_t
-            pi_loss = -(torch.min(ratio * adv_t, clip_adv).mean() + ent_coef * pi.entropy().mean())
-            v = ac.v(obs_t)
-            v_loss = ((v - ret_t) ** 2).mean() * vf_coef
-            loss = pi_loss + v_loss
-            optim_.zero_grad(set_to_none=True)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(ac.parameters(), max_norm=0.5)
-            optim_.step()
+        # 训练多次（支持 minibatch）
+        N = obs_t.shape[0]
+        mb_size = int(minibatch_size or N)
+        for it in range(train_iters):
+            perm = torch.randperm(N, device=device)
+            for i in range(0, N, mb_size):
+                idx = perm[i : i + mb_size]
+                mb_obs = obs_t[idx]
+                mb_act = act_t[idx]
+                mb_adv = adv_t[idx]
+                mb_ret = ret_t[idx]
+                mb_logp_old = logp_old_t[idx]
+
+                pi = ac.pi(mb_obs)
+                logp = pi.log_prob(mb_act)
+                ratio = torch.exp(logp - mb_logp_old)
+                clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * mb_adv
+                pi_loss = -(torch.min(ratio * mb_adv, clip_adv).mean() + ent_coef * pi.entropy().mean())
+                v = ac.v(mb_obs)
+                v_loss = ((v - mb_ret) ** 2).mean() * vf_coef
+                loss = pi_loss + v_loss
+                optim_.zero_grad(set_to_none=True)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(ac.parameters(), max_norm=0.5)
+                optim_.step()
+
+            # KL 早停（估计为均值 KL）
+            if target_kl is not None:
+                with torch.no_grad():
+                    pi = ac.pi(obs_t)
+                    logp = pi.log_prob(act_t)
+                    approx_kl = (logp_old_t - logp).mean().item()
+                if approx_kl > target_kl:
+                    break
+
+        # 学习率退火
+        if anneal_lr:
+            frac = 1.0 - (epoch + 1) / max(1, epochs)
+            for g in optim_.param_groups:
+                g["lr"] = lr * frac
 
         total_steps += buf_steps
 
