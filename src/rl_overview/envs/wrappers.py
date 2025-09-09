@@ -13,6 +13,16 @@ class GymStepEnv:
 
     def __init__(self, env: Any):
         self._env = env
+        # 暴露通用属性，便于算法侧自适应
+        try:
+            self.n_actions = int(env.action_space.n)
+        except Exception:
+            self.n_actions = None  # 连续动作场景暂不支持
+        try:
+            shape = tuple(env.observation_space.shape)
+        except Exception:
+            shape = None
+        self.obs_shape = shape
 
     def reset(self, seed: int | None = None):
         if seed is not None:
@@ -53,4 +63,3 @@ def gym_to_step_env(env_id: str, **kwargs) -> GymStepEnv:
 
     env = gym.make(env_id, **kwargs)
     return GymStepEnv(env)
-

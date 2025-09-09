@@ -36,8 +36,18 @@ def train_reinforce(
     device = get_device()
     rng = np.random.default_rng(seed)
 
-    obs_dim = env.n_states
-    n_actions = env.n_actions
+    # 观测自适应：离散(one-hot)或向量
+    s0 = env.reset(seed=seed)
+    if isinstance(s0, (int, np.integer)):
+        discrete_obs = True
+        obs_dim = int(getattr(env, "n_states"))
+    else:
+        discrete_obs = False
+        if hasattr(env, "obs_shape") and env.obs_shape is not None:
+            obs_dim = int(env.obs_shape[0])
+        else:
+            obs_dim = int(np.asarray(s0).shape[-1])
+    n_actions = int(getattr(env, "n_actions"))
 
     class Policy(nn.Module):
         def __init__(self):
@@ -53,19 +63,22 @@ def train_reinforce(
     pi = Policy().to(device)
     optim_ = optim.Adam(pi.parameters(), lr=lr)
 
-    def one_hot(idx: int):
-        x = torch.zeros(obs_dim, dtype=torch.float32, device=device)
-        x[idx] = 1.0
-        return x
+    def obs_tensor(s):
+        if discrete_obs:
+            x = torch.zeros(obs_dim, dtype=torch.float32, device=device)
+            x[int(s)] = 1.0
+            return x
+        else:
+            return torch.tensor(np.asarray(s), dtype=torch.float32, device=device)
 
     steps = 0
 
     for ep in range(1, episodes + 1):
         logps = []
         rewards = []
-        s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
+        s = s0
         for t in range(max_steps):
-            logits = pi(one_hot(int(s)))
+            logits = pi(obs_tensor(s))
             dist = torch.distributions.Categorical(logits=logits)
             a = int(dist.sample().item())
             logps.append(dist.log_prob(torch.tensor(a, device=device)))
@@ -75,6 +88,8 @@ def train_reinforce(
             steps += 1
             if done:
                 break
+        # 下一轮episode初始状态
+        s0 = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
 
         # 计算回报序列 G_t 并做梯度上升
         G = 0.0
@@ -96,10 +111,10 @@ def train_reinforce(
     # 导出贪心策略
     policy = []
     with torch.no_grad():
-        for s_idx in range(obs_dim):
-            logits = pi(one_hot(s_idx))
-            a = int(torch.argmax(logits).item())
-            policy.append(a)
+        if discrete_obs:
+            for s_idx in range(obs_dim):
+                logits = pi(obs_tensor(s_idx))
+                a = int(torch.argmax(logits).item())
+                policy.append(a)
 
     return ReinforceResult(policy=policy, iters=steps)
-

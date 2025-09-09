@@ -1,0 +1,13 @@
+name: c51
+gamma: 0.99
+lr: 1e-3
+batch_size: 64
+replay_capacity: 10000
+start_learning_after: 1000
+target_sync_interval: 1000
+total_steps: 5000
+n_atoms: 51
+v_min: -1.0
+v_max: 1.0
+seed: 42
+

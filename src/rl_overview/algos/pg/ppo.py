@@ -41,8 +41,18 @@ def train_ppo(
     device = get_device()
     rng = np.random.default_rng(seed)
 
-    S = env.n_states
-    A = env.n_actions
+    # 观测/动作自适应
+    s_probe = env.reset(seed=seed)
+    if isinstance(s_probe, (int, np.integer)):
+        discrete_obs = True
+        S = int(getattr(env, "n_states"))
+    else:
+        discrete_obs = False
+        if hasattr(env, "obs_shape") and env.obs_shape is not None:
+            S = int(env.obs_shape[0])
+        else:
+            S = int(np.asarray(s_probe).shape[-1])
+    A = int(getattr(env, "n_actions"))
 
     class ActorCritic(nn.Module):
         def __init__(self):
@@ -61,10 +71,13 @@ def train_ppo(
     ac = ActorCritic().to(device)
     optim_ = optim.Adam(ac.parameters(), lr=lr)
 
-    def one_hot(idx):
-        x = torch.zeros(S, dtype=torch.float32, device=device)
-        x[idx] = 1.0
-        return x
+    def obs_tensor(s):
+        if discrete_obs:
+            x = torch.zeros(S, dtype=torch.float32, device=device)
+            x[int(s)] = 1.0
+            return x
+        else:
+            return torch.tensor(np.asarray(s), dtype=torch.float32, device=device)
 
     total_steps = 0
     for epoch in range(epochs):
@@ -75,14 +88,14 @@ def train_ppo(
         logp_buf = []       # log π(a_t|s_t)
         done_buf = []       # done_t
 
-        s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
+        s = s_probe
         buf_steps = 0
 
         # 收集一批 trajectories（on-policy）
         while buf_steps < steps_per_epoch:
             with torch.no_grad():
-                pi_dist = ac.pi(one_hot(int(s)))
-                v_t = ac.v(one_hot(int(s)))
+                pi_dist = ac.pi(obs_tensor(s))
+                v_t = ac.v(obs_tensor(s))
             a = int(pi_dist.sample().item())
             logp = float(pi_dist.log_prob(torch.tensor(a, device=device)).item())
             s2, r, done, _ = env.step(a)
@@ -99,7 +112,7 @@ def train_ppo(
 
         # 计算 GAE 与 returns（按批次，忽略跨批次的 bootstrapping）
         with torch.no_grad():
-            last_val = ac.v(one_hot(int(s))).item()
+            last_val = ac.v(obs_tensor(s)).item()
         vals_np = np.array(val_buf + [last_val], dtype=np.float32)
         rews_np = np.array(rew_buf, dtype=np.float32)
         dones_np = np.array(done_buf, dtype=np.bool_)
@@ -114,7 +127,10 @@ def train_ppo(
         ret = adv + vals_np[:-1]
 
         # 转张量
-        obs_t = torch.stack([one_hot(i) for i in obs_buf])
+        if discrete_obs:
+            obs_t = torch.stack([obs_tensor(i) for i in obs_buf])
+        else:
+            obs_t = torch.tensor(np.asarray(obs_buf), dtype=torch.float32, device=device)
         act_t = torch.tensor(act_buf, dtype=torch.int64, device=device)
         adv_t = torch.tensor(adv, dtype=torch.float32, device=device)
         ret_t = torch.tensor(ret, dtype=torch.float32, device=device)
@@ -142,9 +158,10 @@ def train_ppo(
     policy = []
     import torch
     with torch.no_grad():
-        for s_idx in range(S):
-            pi = ac.pi(one_hot(s_idx))
-            a = int(torch.argmax(pi.logits).item())
-            policy.append(a)
+        if discrete_obs:
+            for s_idx in range(S):
+                pi = ac.pi(obs_tensor(s_idx))
+                a = int(torch.argmax(pi.logits).item())
+                policy.append(a)
 
     return PPOResult(policy=policy, iters=total_steps)

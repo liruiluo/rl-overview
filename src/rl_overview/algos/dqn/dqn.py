@@ -55,6 +55,7 @@ def train_dqn(
     prio_alpha: float = 0.6,
     prio_beta: float = 0.4,
     prio_eps: float = 1e-3,
+    noisy: bool = False,
     seed: int = 42,
 ) -> DQNResult:
     if not is_torch_available():  # pragma: no cover - 运行时检查
@@ -69,12 +70,30 @@ def train_dqn(
     device = get_device()
     rng = np.random.default_rng(seed)
 
-    # 这里假设离散状态，使用 one-hot 特征
-    obs_dim = env.n_states
-    n_actions = env.n_actions
-    make_net = build_dueling_qnet if dueling else build_tiny_qnet
-    online = make_net((obs_dim,), n_actions).to(device)
-    target = make_net((obs_dim,), n_actions).to(device)
+    # 探测观测形态：离散（int -> one-hot）或向量（np.ndarray）
+    s = env.reset(seed=seed)
+    if isinstance(s, (int, np.integer)):
+        discrete_obs = True
+        obs_dim = getattr(env, "n_states", None)
+        assert obs_dim is not None, "离散观测需提供 n_states"
+    else:
+        discrete_obs = False
+        if hasattr(env, "obs_shape") and env.obs_shape is not None:
+            obs_dim = int(env.obs_shape[0])
+        else:
+            obs_dim = int(np.asarray(s).shape[-1])
+    n_actions = int(getattr(env, "n_actions"))
+    if discrete_obs:
+        from ...nn.dqn_net import build_tiny_qnet as _maker_small
+        maker = build_dueling_qnet if dueling else _maker_small
+    else:
+        if noisy:
+            from ...nn.dqn_net import build_noisy_qnet as _maker_mlp
+        else:
+            from ...nn.dqn_net import build_mlp_qnet as _maker_mlp
+        maker = build_dueling_qnet if dueling else _maker_mlp
+    online = maker((obs_dim,), n_actions).to(device)
+    target = maker((obs_dim,), n_actions).to(device)
     target.load_state_dict(online.state_dict())
     optim_ = optim.Adam(online.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
@@ -84,7 +103,6 @@ def train_dqn(
         rb = PrioritizedReplayBuffer(replay_capacity, alpha=float(prio_alpha), eps=float(prio_eps))
     else:
         rb = ReplayBuffer(replay_capacity)
-    s = env.reset(seed=seed)
     steps = 0
     n = max(1, int(n_step))
     trace: Deque[tuple] = deque(maxlen=n)
@@ -125,24 +143,35 @@ def train_dqn(
 
         if steps >= start_learning_after and len(rb) >= batch_size:
             if use_prio:
-                S, A, R, S2, D, W, idxs = rb.sample(batch_size, beta=float(prio_beta), rng=rng)
+                # 退火 beta
+                cur_beta = float(prio_beta)
+                try:
+                    beta_final = float(prio_beta)
+                except Exception:
+                    beta_final = cur_beta
+                frac = min(1.0, steps / max(1, total_steps))
+                cur_beta = cur_beta + (beta_final - cur_beta) * frac
+                S, A, R, S2, D, W, idxs = rb.sample(batch_size, beta=cur_beta, rng=rng)
                 W_t = torch.from_numpy(W).float().to(device)
             else:
                 S, A, R, S2, D = rb.sample(batch_size, rng)
-
-            S_oh = torch.from_numpy(_one_hot(obs_dim, S.squeeze(-1))).to(device)
-            S2_oh = torch.from_numpy(_one_hot(obs_dim, S2.squeeze(-1))).to(device)
+            if discrete_obs:
+                S_in = torch.from_numpy(_one_hot(obs_dim, S.squeeze(-1))).to(device)
+                S2_in = torch.from_numpy(_one_hot(obs_dim, S2.squeeze(-1))).to(device)
+            else:
+                S_in = torch.from_numpy(S).float().to(device)
+                S2_in = torch.from_numpy(S2).float().to(device)
             A_t = torch.from_numpy(A).long().to(device)
             R_t = torch.from_numpy(R).float().to(device)
             D_t = torch.from_numpy(D).float().to(device)
 
-            q = online(S_oh).gather(1, A_t.view(-1, 1)).squeeze(1)
+            q = online(S_in).gather(1, A_t.view(-1, 1)).squeeze(1)
             with torch.no_grad():
                 if double_dqn:
-                    next_actions = torch.argmax(online(S2_oh), dim=1)
-                    next_q = target(S2_oh).gather(1, next_actions.view(-1, 1)).squeeze(1)
+                    next_actions = torch.argmax(online(S2_in), dim=1)
+                    next_q = target(S2_in).gather(1, next_actions.view(-1, 1)).squeeze(1)
                 else:
-                    next_q = torch.max(target(S2_oh), dim=1).values
+                    next_q = torch.max(target(S2_in), dim=1).values
                 target_q = R_t + (1.0 - D_t) * (gamma ** n) * next_q
 
             td_err = target_q - q
@@ -165,8 +194,12 @@ def train_dqn(
     # 导出贪心策略（针对离散状态）
     policy = []
     with torch.no_grad():
-        for s_idx in range(env.n_states):
-            q = online(torch.from_numpy(_one_hot(obs_dim, np.array([s_idx]))).to(device))
-            policy.append(int(torch.argmax(q, dim=-1).item()))
+        if discrete_obs:
+            for s_idx in range(getattr(env, "n_states")):
+                q = online(torch.from_numpy(_one_hot(obs_dim, np.array([s_idx]))).to(device))
+                policy.append(int(torch.argmax(q, dim=-1).item()))
+        else:
+            # 对连续观测任务不导出全局策略，这里返回空策略占位
+            policy = []
 
     return DQNResult(policy=policy, iters=steps)

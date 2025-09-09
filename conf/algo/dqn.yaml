@@ -16,4 +16,5 @@ prio_alpha: 0.6
 prio_beta: 0.4
 prio_eps: 0.001
 n_step: 1
+noisy: false
 seed: 42

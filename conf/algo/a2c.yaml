@@ -1,0 +1,9 @@
+name: a2c
+gamma: 0.99
+lr: 3e-4
+steps_per_update: 256
+updates: 10
+vf_coef: 0.5
+ent_coef: 0.0
+seed: 42
+

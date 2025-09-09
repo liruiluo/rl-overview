@@ -41,6 +41,9 @@ def _instantiate_env(cfg: DictConfig):
             n_bits=int(cfg.env.n_bits),
             target_parity=int(cfg.env.target_parity),
         )
+    if name == "gym":
+        from .envs.wrappers import gym_to_step_env
+        return gym_to_step_env(cfg.env.env_id)
     raise ValueError(f"未知环境: {name}")
 
 
@@ -122,10 +125,20 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
             epsilon_end=float(cfg.algo.epsilon_end),
             epsilon_decay_steps=int(cfg.algo.epsilon_decay_steps),
             double_dqn=bool(cfg.algo.double_dqn),
+            dueling=bool(getattr(cfg.algo, "dueling", False)),
+            n_step=int(getattr(cfg.algo, "n_step", 1)),
+            prioritized_replay=bool(getattr(cfg.algo, "prioritized_replay", False)),
+            prio_alpha=float(getattr(cfg.algo, "prio_alpha", 0.6)),
+            prio_beta=float(getattr(cfg.algo, "prio_beta", 0.4)),
+            prio_eps=float(getattr(cfg.algo, "prio_eps", 1e-3)),
+            noisy=bool(getattr(cfg.algo, "noisy", False)),
             seed=int(cfg.algo.seed),
         )
-        # DQN 暂不计算 V(s)，只展示策略；用占位 0
-        values = [0.0 for _ in range(env.n_states)]
+        # DQN 暂不计算 V(s)，只展示策略；用占位 0（连续观测时为空列表）
+        if hasattr(env, "n_states"):
+            values = [0.0 for _ in range(env.n_states)]
+        else:
+            values = []
         return RunResult(policy=res.policy, values=values, iters=res.iters)
     if name == "dyna_q":
         from .algos.model.dyna_q import dyna_q
@@ -141,6 +154,24 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
         )
         values = Q.max(axis=1).tolist()
         return RunResult(policy=policy, values=values, iters=iters)
+    if name == "c51":
+        from .algos.dqn.c51 import train_c51
+        res = train_c51(
+            env=env,
+            gamma=float(cfg.algo.gamma),
+            lr=float(cfg.algo.lr),
+            batch_size=int(cfg.algo.batch_size),
+            replay_capacity=int(cfg.algo.replay_capacity),
+            total_steps=int(cfg.algo.total_steps),
+            start_learning_after=int(cfg.algo.start_learning_after),
+            target_sync_interval=int(cfg.algo.target_sync_interval),
+            n_atoms=int(cfg.algo.n_atoms),
+            v_min=float(cfg.algo.v_min),
+            v_max=float(cfg.algo.v_max),
+            seed=int(cfg.algo.seed),
+        )
+        values = [0.0 for _ in range(env.n_states)]
+        return RunResult(policy=res.policy, values=values, iters=res.iters)
     if name == "reinforce":
         from .algos.pg.reinforce import train_reinforce
         res = train_reinforce(
@@ -164,6 +195,20 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
             epochs=int(cfg.algo.epochs),
             clip_ratio=float(cfg.algo.clip_ratio),
             train_iters=int(cfg.algo.train_iters),
+            vf_coef=float(cfg.algo.vf_coef),
+            ent_coef=float(cfg.algo.ent_coef),
+            seed=int(cfg.algo.seed),
+        )
+        values = [0.0 for _ in range(env.n_states)]
+        return RunResult(policy=res.policy, values=values, iters=res.iters)
+    if name == "a2c":
+        from .algos.pg.a2c import train_a2c
+        res = train_a2c(
+            env=env,
+            gamma=float(cfg.algo.gamma),
+            lr=float(cfg.algo.lr),
+            steps_per_update=int(cfg.algo.steps_per_update),
+            updates=int(cfg.algo.updates),
             vf_coef=float(cfg.algo.vf_coef),
             ent_coef=float(cfg.algo.ent_coef),
             seed=int(cfg.algo.seed),
