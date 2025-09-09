@@ -30,6 +30,8 @@ uv run -m rl_overview.cli.bandits_run env=bernoulli_bandit algo=ucb1
 uv run -m rl_overview.cli.exp_run algo=q_learning algo.episodes=500 print_every=50
 # 指标汇总/移动平均
 uv run -m rl_overview.cli.plot_metrics metrics_path=outputs/<run>/metrics.csv ma_window=50
+# ASCII 曲线
+uv run -m rl_overview.cli.ascii_plot metrics_path=outputs/<run>/metrics.csv width=80 height=16
 
 # 表格法参数网格搜索（写入 sweep/ 子目录）
 uv run -m rl_overview.cli.sweep_q_learning exp=sweep_q_learning algo=q_learning
