@@ -16,6 +16,7 @@ def mc_control_every_visit(
     episodes: int = 10_000,
     max_steps: int = 1_000,
     seed: int = 42,
+    logger=None,
 ) -> Tuple[List[int], np.ndarray, int]:
     """
     每次访问（every-visit）MC 控制（ε-贪心），返回：贪心策略、Q(s,a)、轨迹数。
@@ -33,6 +34,13 @@ def mc_control_every_visit(
             return epsilon_greedy_action(Q, s, epsilon, A, rng)
 
         traj: Episode = run_episode(env, policy, max_steps, rng)
+        if logger is not None:
+            G0 = 0.0
+            g = 1.0
+            for r in traj.rewards:
+                G0 += g * r
+                g *= gamma
+            logger.log(ep, G0, len(traj.actions))
 
         # 计算每个时间步的回报 G_t，并对该回合中每次访问的 (s,a) 更新均值
         G = 0.0
@@ -52,4 +60,3 @@ def mc_control_every_visit(
 
     policy_greedy = [int(greedy_action(Q, s)) for s in range(S)]
     return policy_greedy, Q, episodes
-

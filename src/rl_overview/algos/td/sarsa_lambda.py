@@ -18,6 +18,7 @@ def sarsa_lambda(
     episodes: int = 2000,
     max_steps: int = 1000,
     seed: int = 42,
+    logger=None,
 ) -> Tuple[List[int], np.ndarray, int]:
     """
     Sarsa(λ)：资格迹版本的 on-policy TD 控制。
@@ -31,6 +32,8 @@ def sarsa_lambda(
         E = np.zeros((S, A), dtype=np.float64)
         s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
         a = epsilon_greedy_action(Q, s, epsilon, A, rng)
+        ep_ret = 0.0
+        ep_len = 0
         for _ in range(max_steps):
             s2, r, done, _ = env.step(a)
             a2 = epsilon_greedy_action(Q, s2, epsilon, A, rng)
@@ -39,11 +42,14 @@ def sarsa_lambda(
             Q += alpha * td_err * E
             E *= gamma * lam
             s, a = s2, a2
+            ep_ret += r
+            ep_len += 1
             if done:
                 break
+        if logger is not None:
+            logger.log(ep, ep_ret, ep_len)
         if ep % max(1, episodes // 10) == 0:
             console.log(f"Sarsa(lambda) 进度 {ep}/{episodes}")
 
     policy = [int(greedy_action(Q, s)) for s in range(S)]
     return policy, Q, episodes
-
