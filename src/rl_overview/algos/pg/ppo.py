@@ -32,6 +32,7 @@ def train_ppo(
     ent_coef: float = 0.0,
     target_kl: float | None = None,
     anneal_lr: bool = False,
+    logger=None,
     seed: int = 42,
 ) -> PPOResult:
     if not is_torch_available():  # pragma: no cover
@@ -93,6 +94,11 @@ def train_ppo(
 
         s = s_probe
         buf_steps = 0
+        # 每 epoch 内统计的 episode 回报
+        ep_returns = []
+        ep_lengths = []
+        cur_ret = 0.0
+        cur_len = 0
 
         # 收集一批 trajectories（on-policy）
         while buf_steps < steps_per_epoch:
@@ -110,7 +116,15 @@ def train_ppo(
             logp_buf.append(logp)
             done_buf.append(bool(done))
 
-            s = env.reset(seed=int(rng.integers(0, 2**31 - 1))) if done else s2
+            cur_ret += float(r)
+            cur_len += 1
+            if done:
+                ep_returns.append(cur_ret)
+                ep_lengths.append(cur_len)
+                cur_ret, cur_len = 0.0, 0
+                s = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
+            else:
+                s = s2
             buf_steps += 1
 
         # 计算 GAE 与 returns（按批次，忽略跨批次的 bootstrapping）
@@ -182,6 +196,11 @@ def train_ppo(
                 g["lr"] = lr * frac
 
         total_steps += buf_steps
+
+        # 写入日志（按 epoch 粗粒度统计）
+        if logger is not None and ep_returns:
+            import numpy as _np
+            logger.log(epoch + 1, float(_np.mean(ep_returns)), int(_np.mean(ep_lengths)))
 
     # 导出贪心策略
     policy = []

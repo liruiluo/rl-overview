@@ -53,8 +53,8 @@ uv run -m rl_overview.train algo=ppo steps_per_epoch=512 epochs=2
 
 # 在 Gym（CartPole）上运行（需 --extra gym）
 uv sync --extra gym
-uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=dqn algo.total_steps=5000
-uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=ppo steps_per_epoch=1024 epochs=5
+uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=dqn algo.total_steps=5000 metrics_file=metrics_dqn.csv
+uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=ppo steps_per_epoch=1024 epochs=5 metrics_file=metrics_ppo.csv
 ```
 
 ## 多智能体（MARL）

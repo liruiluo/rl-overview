@@ -58,6 +58,10 @@ def train_dqn(
     prio_beta_end: float = 1.0,
     prio_eps: float = 1e-3,
     noisy: bool = False,
+    eval_env=None,
+    eval_interval: int = 1000,
+    eval_episodes: int = 5,
+    logger=None,
     seed: int = 42,
 ) -> DQNResult:
     if not is_torch_available():  # pragma: no cover - 运行时检查
@@ -112,6 +116,33 @@ def train_dqn(
     def epsilon_by_step(t):
         f = min(1.0, t / max(1, epsilon_decay_steps))
         return epsilon_start + (epsilon_end - epsilon_start) * f
+
+    def _eval_policy():
+        if eval_env is None:
+            return None
+        import torch
+        rng_eval = np.random.default_rng(seed + 1)
+        returns = []
+        lengths = []
+        for _ in range(eval_episodes):
+            s_eval = eval_env.reset(seed=int(rng_eval.integers(0, 2**31 - 1)))
+            ep_ret = 0.0
+            ep_len = 0
+            done_eval = False
+            while not done_eval and ep_len < 10000:
+                with torch.no_grad():
+                    if discrete_obs:
+                        q = online(torch.from_numpy(_one_hot(obs_dim, np.array([s_eval]))).to(device))
+                    else:
+                        x = torch.from_numpy(np.asarray(s_eval)[None, ...]).float().to(device)
+                        q = online(x)
+                    a_eval = int(torch.argmax(q, dim=-1).item())
+                s_eval, r_eval, done_eval, _ = eval_env.step(a_eval)
+                ep_ret += float(r_eval)
+                ep_len += 1
+            returns.append(ep_ret)
+            lengths.append(ep_len)
+        return float(np.mean(returns)), int(np.mean(lengths))
 
     while steps < total_steps:
         eps = epsilon_by_step(steps)
@@ -191,6 +222,12 @@ def train_dqn(
 
         if steps % target_sync_interval == 0:
             target.load_state_dict(online.state_dict())
+
+        if eval_env is not None and eval_interval > 0 and steps % eval_interval == 0:
+            res = _eval_policy()
+            if res is not None and logger is not None:
+                ret_mean, len_mean = res
+                logger.log(steps, ret_mean, len_mean)
 
     # 导出贪心策略（针对离散状态）
     policy = []

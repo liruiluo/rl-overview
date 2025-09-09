@@ -18,4 +18,6 @@ prio_beta_end: 1.0
 prio_eps: 0.001
 n_step: 1
 noisy: false
+eval_interval: 1000
+eval_episodes: 5
 seed: 42

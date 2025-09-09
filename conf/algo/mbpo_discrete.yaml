@@ -1,0 +1,10 @@
+name: mbpo_discrete
+gamma: 0.99
+alpha: 0.1
+epsilon: 0.1
+real_steps: 1000
+model_train_episodes: 200
+model_rollouts_per_update: 500
+model_horizon: 5
+seed: 42
+

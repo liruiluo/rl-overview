@@ -3,10 +3,12 @@ from __future__ import annotations
 import hydra
 from omegaconf import DictConfig
 from rich.console import Console
+from pathlib import Path
 
 from ..envs.wrappers import gym_to_step_env
 from ..algos.dqn.dqn import train_dqn
 from ..algos.pg.ppo import train_ppo
+from ..utils.logger import EpisodeLogger
 
 console = Console()
 
@@ -15,6 +17,9 @@ console = Console()
 def main(cfg: DictConfig) -> None:
     env = gym_to_step_env(cfg.env.env_id)
     algo = cfg.algo.name
+    metrics_file = getattr(cfg, "metrics_file", None)
+    logger = EpisodeLogger(Path(metrics_file)) if metrics_file else None
+
     if algo == "dqn":
         res = train_dqn(
             env=env,
@@ -35,6 +40,10 @@ def main(cfg: DictConfig) -> None:
             prio_alpha=cfg.algo.prio_alpha,
             prio_beta=cfg.algo.prio_beta,
             prio_eps=cfg.algo.prio_eps,
+            eval_env=gym_to_step_env(cfg.env.env_id) if metrics_file else None,
+            eval_interval=getattr(cfg.algo, "eval_interval", 1000),
+            eval_episodes=getattr(cfg.algo, "eval_episodes", 5),
+            logger=logger,
             seed=cfg.seed,
         )
         console.rule("Gym DQN 完成")
@@ -51,6 +60,7 @@ def main(cfg: DictConfig) -> None:
             train_iters=cfg.algo.train_iters,
             vf_coef=cfg.algo.vf_coef,
             ent_coef=cfg.algo.ent_coef,
+            logger=logger,
             seed=cfg.seed,
         )
         console.rule("Gym PPO 完成")
@@ -61,4 +71,3 @@ def main(cfg: DictConfig) -> None:
 
 if __name__ == "__main__":
     main()
-

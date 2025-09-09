@@ -156,6 +156,21 @@ def _run_algo(cfg: DictConfig, env) -> RunResult:
         )
         values = Q.max(axis=1).tolist()
         return RunResult(policy=policy, values=values, iters=iters)
+    if name == "mbpo_discrete":
+        from .algos.model.mbpo_discrete import mbpo_discrete
+        res = mbpo_discrete(
+            env=env,
+            gamma=float(cfg.algo.gamma),
+            alpha=float(cfg.algo.alpha),
+            epsilon=float(cfg.algo.epsilon),
+            real_steps=int(cfg.algo.real_steps),
+            model_train_episodes=int(cfg.algo.model_train_episodes),
+            model_rollouts_per_update=int(cfg.algo.model_rollouts_per_update),
+            model_horizon=int(cfg.algo.model_horizon),
+            seed=int(cfg.algo.seed),
+        )
+        values = [0.0 for _ in range(env.n_states)]
+        return RunResult(policy=res.policy, values=values, iters=res.iters)
     if name == "c51":
         from .algos.dqn.c51 import train_c51
         res = train_c51(
