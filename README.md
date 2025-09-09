@@ -55,6 +55,15 @@ uv run -m rl_overview.train algo=ppo steps_per_epoch=512 epochs=2
 uv sync --extra gym
 uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=dqn algo.total_steps=5000 metrics_file=metrics_dqn.csv
 uv run -m rl_overview.cli.gym_run env=gym_cartpole algo=ppo steps_per_epoch=1024 epochs=5 metrics_file=metrics_ppo.csv
+
+# Gym DQN 参数网格（Rainbow要素ablation，写入 sweep_gym_dqn/）
+uv run -m rl_overview.cli.gym_sweep_dqn env=gym_cartpole algo=dqn exp=gym_dqn_sweep
+uv run -m rl_overview.cli.aggregate_sweep sweep_dir=sweep_gym_dqn
+
+## RLVR（可验证奖励）示例
+
+```bash
+uv run -m rl_overview.cli.rlvr_run env=rlvr_binary algo=reinforce algo.episodes=500 metrics_file=metrics_rlvr.csv
 ```
 
 ## 多智能体（MARL）

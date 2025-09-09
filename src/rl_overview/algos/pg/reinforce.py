@@ -25,6 +25,7 @@ def train_reinforce(
     episodes: int = 2000,
     max_steps: int = 1000,
     seed: int = 42,
+    logger=None,
 ) -> ReinforceResult:
     if not is_torch_available():  # pragma: no cover
         raise RuntimeError("未安装 torch。请使用 `uv sync --extra torch` 后再运行 REINFORCE。")
@@ -90,6 +91,10 @@ def train_reinforce(
                 break
         # 下一轮episode初始状态
         s0 = env.reset(seed=int(rng.integers(0, 2**31 - 1)))
+        if logger is not None:
+            ep_ret = float(sum(rewards))
+            ep_len = int(len(rewards))
+            logger.log(ep, ep_ret, ep_len)
 
         # 计算回报序列 G_t 并做梯度上升
         G = 0.0
