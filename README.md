@@ -1,5 +1,9 @@
 # RL Overview (代码即教材)
 
+
+## 偏好数据与奖励模型（Numpy 版）
+
+
 本项目以“代码即教材”为目标，配合 Hydra 与 uv 管理，内容覆盖：值函数、策略梯度、模型驱动、多智能体、以及 LLM×RL 等专题。
 
 ## 安装
@@ -22,6 +26,7 @@ uv run -m rl_overview.train algo=dyna_q
 
 # 规划演示（模型已知）
 uv run -m rl_overview.cli.plan_run algo=mcts
+uv run -m rl_overview.cli.ensemble_plan_run n_models=5 horizon=8 n_candidates=200
 
 # Bandit
 uv run -m rl_overview.cli.bandits_run env=bernoulli_bandit algo=ucb1
@@ -66,6 +71,12 @@ uv run -m rl_overview.cli.aggregate_sweep sweep_dir=sweep_gym_dqn
 
 ```bash
 uv run -m rl_overview.cli.rlvr_run env=rlvr_binary algo=reinforce algo.episodes=500 metrics_file=metrics_rlvr.csv
+```
+
+## 偏好数据与奖励模型（Numpy 版）
+
+```bash
+uv run -m rl_overview.cli.prefs_run env=gridworld1d episodes=200
 ```
 
 ## 多智能体（MARL）
